@@ -29,15 +29,12 @@ workflows:
     scripts:
       - name: npm 의존성 설치
         script: npm ci
-      - name: iOS 플랫폼 추가 (없을 경우)
+      - name: iOS 플랫폼 추가 및 동기화
         script: |
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
-      - name: Capacitor 동기화
-        script: npx cap sync ios
+          npx cap add ios || true
+          npx cap sync ios
       - name: CocoaPods 설치
-        script: cd ios/App && pod install
+        script: cd ios/App && pod install --repo-update
       - name: iOS 빌드 (서명 없음 — 시뮬레이터용)
         script: |
           xcodebuild \
@@ -61,18 +58,17 @@ workflows:
       node: 24
       cocoapods: default
       ios_signing:
-        distribution_type: ad_hoc        # app_store 로 변경 시 App Store 배포
+        distribution_type: ad_hoc
         bundle_identifier: com.rurutek.gpstracker
     scripts:
       - name: npm 의존성 설치
         script: npm ci
-      - name: iOS 플랫폼 추가
+      - name: iOS 플랫폼 추가 및 동기화
         script: |
-          if [ ! -d "ios" ]; then npx cap add ios; fi
-      - name: Capacitor 동기화
-        script: npx cap sync ios
+          npx cap add ios || true
+          npx cap sync ios
       - name: CocoaPods 설치
-        script: cd ios/App && pod install
+        script: cd ios/App && pod install --repo-update
       - name: IPA 빌드 및 서명
         script: |
           xcode-project use-profiles
