@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>RURUTEK GPS</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d1117">
+
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RURUTEK GPS">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="apple-touch-startup-image" href="icons/icon-512.png">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --bg:     #0d1117;
+  --card:   #161b22;
+  --border: #30363d;
+  --green:  #00ff88;
+  --blue:   #58a6ff;
+  --yellow: #f0c040;
+  --red:    #ff4d4d;
+  --text:   #e6edf3;
+  --muted:  #8b949e;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
+             font-family:'Segoe UI',Arial,sans-serif; }
+
+/* ── Header ── */
+header {
+  position:fixed; top:0; left:0; right:0; z-index:1000;
+  background:var(--card); border-bottom:1px solid var(--border);
+  padding:10px 14px; display:flex; justify-content:space-between; align-items:center;
+  height:54px;
+}
+header h1 { font-size:.85rem; letter-spacing:2px; color:var(--blue); }
+.hright { display:flex; align-items:center; gap:8px; }
+.dot { width:9px; height:9px; border-radius:50%; background:var(--border); flex-shrink:0; }
+.dot.on  { background:var(--green); animation:pulse 1.5s infinite; }
+.dot.err { background:var(--red); }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+.status-label { font-size:.72rem; color:var(--muted); }
+
+/* ── Mode tabs ── */
+.tabs { display:flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.tab  { padding:5px 13px; font-size:.7rem; font-weight:700; letter-spacing:1px;
+        background:transparent; color:var(--muted); border:none; cursor:pointer; }
+.tab.active.serial { background:#58a6ff22; color:var(--blue); }
+.tab.active.gprs   { background:#00ff8822; color:var(--green); }
+
+/* ── Map ── */
+#map { position:fixed; top:54px; left:0; right:0; bottom:220px; z-index:0; }
+.leaflet-tile { filter:brightness(.85) saturate(.75); }
+
+/* ── Bottom panel ── */
+.bottom {
+  position:fixed; bottom:0; left:0; right:0; height:220px; z-index:500;
+  background:var(--card); border-top:1px solid var(--border);
+  display:flex; flex-direction:column; gap:0;
+}
+
+/* ── Stat grid ── */
+.stats {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--border); border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.stat { background:var(--card); padding:8px 4px; text-align:center; }
+.stat .val { font-size:1.05rem; font-weight:700; color:var(--blue); line-height:1; }
+.stat .lbl { font-size:.6rem; color:var(--muted); margin-top:3px; letter-spacing:.5px; text-transform:uppercase; }
+.stat .val.green { color:var(--green); }
+.stat .val.yellow { color:var(--yellow); }
+.stat .val.red { color:var(--red); }
+
+/* ── Coord row ── */
+.coords {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:6px 12px; border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.coords .coord-pair { font-size:.72rem; color:var(--muted); }
+.coords .coord-pair span { color:var(--text); font-weight:600; margin-left:4px; }
+.fix-badge { font-size:.65rem; padding:2px 8px; border-radius:10px; font-weight:700;
+             background:#00ff8822; color:var(--green); border:1px solid var(--green); }
+.fix-badge.nofix { background:#ff4d4d11; color:var(--red); border-color:var(--red); }
+
+/* ── Log ── */
+.log-wrap { flex:1; overflow:hidden; position:relative; }
+#log { position:absolute; inset:0; overflow-y:auto; padding:4px 10px;
+       font-size:.65rem; font-family:'Courier New',monospace; color:var(--muted); }
+#log div { border-bottom:1px solid #30363d40; padding:2px 0; white-space:nowrap;
+           overflow:hidden; text-overflow:ellipsis; }
+#log div.hi { color:var(--green); }
+#log div.err { color:var(--red); }
+
+/* ── Config sheet ── */
+.cfg-overlay { position:fixed; inset:0; z-index:2000; background:#000a;
+               display:none; align-items:flex-end; }
+.cfg-overlay.open { display:flex; }
+.cfg-sheet { width:100%; background:var(--card); border-top:1px solid var(--border);
+             padding:20px 16px 30px; display:flex; flex-direction:column; gap:12px; }
+.cfg-sheet h2 { font-size:.85rem; color:var(--blue); letter-spacing:1px; }
+.field { display:flex; flex-direction:column; gap:4px; }
+.field label { font-size:.7rem; color:var(--muted); }
+.field input { background:#0d1117; border:1px solid var(--border); border-radius:6px;
+               color:var(--text); padding:8px 10px; font-size:.85rem; outline:none;
+               -webkit-appearance:none; }
+.field input:focus { border-color:var(--blue); }
+.cfg-btns { display:flex; gap:8px; margin-top:4px; }
+.btn { flex:1; padding:10px; border-radius:6px; border:none; font-size:.8rem;
+       font-weight:700; cursor:pointer; letter-spacing:.5px; }
+.btn.primary { background:var(--blue); color:#0d1117; }
+.btn.cancel  { background:transparent; border:1px solid var(--border); color:var(--muted); }
+
+/* ── Settings icon ── */
+.gear-btn { background:transparent; border:1px solid var(--border); border-radius:6px;
+            color:var(--muted); padding:4px 8px; font-size:.9rem; cursor:pointer; }
+
+/* ── SOS overlay ── */
+.sos-overlay { position:fixed; inset:0; z-index:3000; background:#ff000033;
+               display:none; align-items:center; justify-content:center;
+               animation:sosPulse 1s infinite; }
+.sos-overlay.on { display:flex; }
+.sos-box { background:#1a0000; border:2px solid var(--red); border-radius:12px;
+           padding:30px 40px; text-align:center; }
+.sos-box h2 { font-size:2rem; color:var(--red); letter-spacing:4px; }
+.sos-box p  { color:var(--muted); margin-top:6px; font-size:.8rem; }
+.sos-dismiss { margin-top:16px; padding:10px 24px; background:var(--red); border:none;
+               border-radius:6px; color:#fff; font-weight:700; cursor:pointer; font-size:.85rem; }
+@keyframes sosPulse { 0%,100%{background:#ff000033} 50%{background:#ff000066} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9632; RURUTEK GPS</h1>
+  <div class="hright">
+    <div class="tabs">
+      <button class="tab serial active" onclick="setMode('serial')">SERIAL</button>
+      <button class="tab gprs"   onclick="setMode('gprs')">GPRS</button>
+    </div>
+    <div class="dot" id="dot"></div>
+    <span class="status-label" id="statusLabel">OFFLINE</span>
+    <button class="gear-btn" onclick="openCfg()">&#9881;</button>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<div class="bottom">
+  <div class="stats">
+    <div class="stat">
+      <div class="val green" id="vBat">--</div>
+      <div class="lbl">Battery</div>
+    </div>
+    <div class="stat">
+      <div class="val" id="vSats">--</div>
+      <div class="lbl">Sats</div>
+    </div>
+    <div class="stat">
+      <div class="val" id="vRssi">--</div>
+      <div class="lbl">RSSI</div>
+    </div>
+    <div class="stat">
+      <div class="val" id="vSig">--</div>
+      <div class="lbl">Signal</div>
+    </div>
+  </div>
+  <div class="coords">
+    <div class="coord-pair">LAT<span id="vLat">--</span></div>
+    <div class="coord-pair">LON<span id="vLon">--</span></div>
+    <div id="fixBadge" class="fix-badge nofix">NO FIX</div>
+  </div>
+  <div class="log-wrap"><div id="log"></div></div>
+</div>
+
+<!-- Config sheet -->
+<div class="cfg-overlay" id="cfgOverlay" onclick="closeCfgOutside(event)">
+  <div class="cfg-sheet">
+    <h2>&#9881; CONNECTION SETTINGS</h2>
+    <div class="field">
+      <label>Bridge IP (Serial mode)</label>
+      <input id="cfgBridgeIp" type="text" placeholder="192.168.1.100" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label>Bridge WebSocket Port</label>
+      <input id="cfgWsPort" type="number" placeholder="8765" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label>Thingspeak Channel ID</label>
+      <input id="cfgTsChannel" type="text" placeholder="3405873">
+    </div>
+    <div class="field">
+      <label>Thingspeak Read API Key</label>
+      <input id="cfgTsKey" type="text" placeholder="3TIR9TJTDCT9L0C3">
+    </div>
+    <div class="cfg-btns">
+      <button class="btn cancel" onclick="closeCfg()">CANCEL</button>
+      <button class="btn primary" onclick="saveCfg()">SAVE &amp; CONNECT</button>
+    </div>
+  </div>
+</div>
+
+<!-- SOS overlay -->
+<div class="sos-overlay" id="sosOverlay">
+  <div class="sos-box">
+    <h2>&#9888; SOS</h2>
+    <p>Emergency signal received from tracker</p>
+    <button class="sos-dismiss" onclick="dismissSos()">DISMISS</button>
+  </div>
+</div>
+
+<script>
+// ── Config (persisted in localStorage) ──────────────────────────
+const CFG_KEY = 'rurutek_cfg';
+let cfg = {
+  bridgeIp:   '192.168.1.100',
+  wsPort:     8765,
+  tsChannel:  '3405873',
+  tsKey:      '3TIR9TJTDCT9L0C3',
+};
+function loadCfg() {
+  try { const s = localStorage.getItem(CFG_KEY); if (s) cfg = {...cfg, ...JSON.parse(s)}; }
+  catch(e) {}
+}
+function saveCfgStore() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+// ── State ────────────────────────────────────────────────────────
+let mode     = 'serial'; // 'serial' | 'gprs'
+let ws       = null;
+let gprsTimer = null;
+const latest = { lat:null, lon:null, fix:false, bat:null, bat_v:null,
+                 sats:null, rssi:null, dbm:null, qual:null, ts:null };
+
+// ── Map ──────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl:true, attributionControl:false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+const markerIcon = L.divIcon({
+  html: `<svg width="28" height="38" viewBox="0 0 28 38" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 24 14 24s14-13.5 14-24C28 6.3 21.7 0 14 0z" fill="#ff4d4d"/>
+    <circle cx="14" cy="14" r="7" fill="#fff"/>
+    <circle cx="14" cy="14" r="4" fill="#ff4d4d"/>
+  </svg>`,
+  className:'', iconSize:[28,38], iconAnchor:[14,38], popupAnchor:[0,-38]
+});
+let marker = null;
+map.setView([0, 0], 2);
+
+function updateMap(lat, lon) {
+  if (lat == null || lon == null) return;
+  const pos = [lat, lon];
+  if (!marker) {
+    marker = L.marker(pos, {icon: markerIcon}).addTo(map);
+    map.setView(pos, 15);
+  } else {
+    marker.setLatLng(pos);
+    map.panTo(pos);
+  }
+}
+
+// ── UI helpers ───────────────────────────────────────────────────
+function setDot(state) { // 'on'|'err'|''
+  const d = document.getElementById('dot');
+  d.className = 'dot' + (state ? ' '+state : '');
+}
+function setStatus(txt) { document.getElementById('statusLabel').textContent = txt; }
+function log(txt, cls='') {
+  const el = document.getElementById('log');
+  const d  = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = txt;
+  el.prepend(d);
+  while (el.children.length > 60) el.removeChild(el.lastChild);
+}
+function batClass(v) { return v == null ? '' : v > 50 ? 'green' : v > 20 ? 'yellow' : 'red'; }
+function rssiClass(v) { return v == null ? '' : v >= 20 ? 'green' : v >= 10 ? 'yellow' : 'red'; }
+function updateStats() {
+  const bat = document.getElementById('vBat');
+  bat.textContent  = latest.bat != null ? latest.bat+'%' : '--';
+  bat.className    = 'val ' + batClass(latest.bat);
+
+  document.getElementById('vSats').textContent = latest.sats != null ? latest.sats : '--';
+
+  const rs = document.getElementById('vRssi');
+  rs.textContent = latest.rssi != null ? latest.rssi : '--';
+  rs.className   = 'val ' + rssiClass(latest.rssi);
+
+  document.getElementById('vSig').textContent  = latest.qual || '--';
+  document.getElementById('vLat').textContent  = latest.lat  != null ? latest.lat.toFixed(5) : '--';
+  document.getElementById('vLon').textContent  = latest.lon  != null ? latest.lon.toFixed(5) : '--';
+
+  const fb = document.getElementById('fixBadge');
+  fb.textContent = latest.fix ? 'GPS FIX' : 'NO FIX';
+  fb.className   = 'fix-badge' + (latest.fix ? '' : ' nofix');
+
+  updateMap(latest.lat, latest.lon);
+}
+
+// ── Mode switching ───────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.classList.contains(m));
+  });
+  disconnect();
+  connect();
+}
+
+// ── Serial / WebSocket ───────────────────────────────────────────
+function connect() {
+  if (mode === 'serial') connectSerial();
+  else connectGprs();
+}
+function disconnect() {
+  if (ws) { try { ws.close(); } catch(e){} ws = null; }
+  if (gprsTimer) { clearInterval(gprsTimer); gprsTimer = null; }
+  setDot(''); setStatus('OFFLINE');
+}
+
+let _lastLat = null;
+function parseUart(line) {
+  let changed = false;
+  let m;
+  m = line.match(/\+CSQ:\s*(\d+)/);
+  if (m) {
+    const r = parseInt(m[1]);
+    latest.rssi = r;
+    latest.dbm  = r !== 99 ? -113 + r*2 : null;
+    latest.qual = r >= 20 ? 'Excellent' : r >= 15 ? 'Good' : r >= 10 ? 'Fair' : r >= 5 ? 'Poor' : 'No Signal';
+    changed = true;
+  }
+  m = line.match(/Percent\s*:\s*(\d+)\s*%/);
+  if (m) { latest.bat = parseInt(m[1]); changed = true; }
+  m = line.match(/Voltage\s*:\s*([\d.]+)\s*V/);
+  if (m) { latest.bat_v = parseFloat(m[1]); changed = true; }
+  m = line.match(/LAT:\s*(-?[\d.]+)/);
+  if (m) { _lastLat = parseFloat(m[1]); }
+  m = line.match(/LON:\s*(-?[\d.]+)/);
+  if (m && _lastLat !== null) {
+    latest.lat = _lastLat; latest.lon = parseFloat(m[1]);
+    latest.fix = true; latest.ts = new Date().toISOString();
+    changed = true;
+  }
+  m = line.match(/\$G[A-Z]GGA,[^,]*,[^,]*,[^,]*,[^,]*,[^,]*,[0-9]+,([0-9]+)/);
+  if (m) { latest.sats = parseInt(m[1]); changed = true; }
+  return changed;
+}
+
+function connectSerial() {
+  const url = `ws://${cfg.bridgeIp}:${cfg.wsPort}`;
+  log(`Connecting ${url}...`);
+  setDot(''); setStatus('CONNECTING');
+  try {
+    ws = new WebSocket(url);
+  } catch(e) { log('WS error: '+e.message,'err'); setDot('err'); setStatus('ERROR'); return; }
+
+  ws.onopen = () => {
+    setDot('on'); setStatus('LIVE');
+    log('Bridge connected','hi');
+  };
+  ws.onmessage = (ev) => {
+    const data = ev.data.trim();
+    // JSON GPRS push from bridge
+    try {
+      const j = JSON.parse(data);
+      if (j.type === 'gprs' && j.payload) { applyGprs(j.payload); return; }
+    } catch(e) {}
+    // Raw UART line
+    if (parseUart(data)) updateStats();
+    log(data);
+  };
+  ws.onerror = () => { setDot('err'); setStatus('ERROR'); log('WS error','err'); };
+  ws.onclose = () => {
+    setDot('err'); setStatus('OFFLINE'); log('Disconnected');
+    setTimeout(() => { if (mode==='serial') connectSerial(); }, 5000);
+  };
+}
+
+// ── GPRS / Thingspeak ────────────────────────────────────────────
+function applyGprs(p) {
+  if (p.lat  != null) { latest.lat = p.lat; latest.fix = true; }
+  if (p.lon  != null) latest.lon  = p.lon;
+  if (p.bat  != null) latest.bat  = p.bat;
+  if (p.sats != null) latest.sats = p.sats;
+  if (p.rssi != null) {
+    latest.rssi = p.rssi;
+    latest.dbm  = -113 + p.rssi*2;
+    latest.qual = p.rssi >= 20 ? 'Excellent' : p.rssi >= 15 ? 'Good' :
+                  p.rssi >= 10 ? 'Fair'       : p.rssi >= 5  ? 'Poor' : 'No Signal';
+  }
+  if (p.sos) {
+    document.getElementById('sosOverlay').classList.add('on');
+    log('*** SOS RECEIVED ***', 'err');
+  }
+  updateStats();
+  if (p.created_at || p.gprs_ts)
+    log(`GPRS fix  ${latest.lat?.toFixed(5)},${latest.lon?.toFixed(5)}  bat=${latest.bat}%`, 'hi');
+}
+
+function connectGprs() {
+  setDot('on'); setStatus('GPRS');
+  log('Polling Thingspeak...','hi');
+  fetchThingspeak();
+  gprsTimer = setInterval(fetchThingspeak, 20000);
+}
+
+function fetchThingspeak() {
+  const url = `https://api.thingspeak.com/channels/${cfg.tsChannel}/feeds/last.json?api_key=${cfg.tsKey}`;
+  fetch(url)
+    .then(r => r.json())
+    .then(f => {
+      if (!f.field1 && !f.field7) { log('Thingspeak: no data yet'); return; }
+      applyGprs({
+        lat:  f.field1 ? parseFloat(f.field1) : null,
+        lon:  f.field2 ? parseFloat(f.field2) : null,
+        bat:  f.field3 ? parseInt(f.field3)   : null,
+        sats: f.field5 ? parseInt(f.field5)   : null,
+        rssi: f.field6 ? parseInt(f.field6)   : null,
+        sos:  f.field7 === '1',
+        created_at: f.created_at,
+      });
+    })
+    .catch(e => { log('Thingspeak error: '+e.message,'err'); });
+}
+
+// ── Config sheet ─────────────────────────────────────────────────
+function openCfg() {
+  document.getElementById('cfgBridgeIp').value   = cfg.bridgeIp;
+  document.getElementById('cfgWsPort').value     = cfg.wsPort;
+  document.getElementById('cfgTsChannel').value  = cfg.tsChannel;
+  document.getElementById('cfgTsKey').value      = cfg.tsKey;
+  document.getElementById('cfgOverlay').classList.add('open');
+}
+function closeCfg()  { document.getElementById('cfgOverlay').classList.remove('open'); }
+function closeCfgOutside(e) { if (e.target === document.getElementById('cfgOverlay')) closeCfg(); }
+function saveCfg() {
+  cfg.bridgeIp  = document.getElementById('cfgBridgeIp').value.trim()  || cfg.bridgeIp;
+  cfg.wsPort    = parseInt(document.getElementById('cfgWsPort').value)  || cfg.wsPort;
+  cfg.tsChannel = document.getElementById('cfgTsChannel').value.trim() || cfg.tsChannel;
+  cfg.tsKey     = document.getElementById('cfgTsKey').value.trim()     || cfg.tsKey;
+  saveCfgStore();
+  closeCfg();
+  disconnect();
+  connect();
+}
+
+function dismissSos() { document.getElementById('sosOverlay').classList.remove('on'); }
+
+// ── Boot ─────────────────────────────────────────────────────────
+loadCfg();
+connect();
+
+// ── Service Worker 등록 (PWA) ────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

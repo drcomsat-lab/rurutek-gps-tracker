@@ -1,0 +1,23 @@
+{
+  "appId": "com.rurutek.gpstracker",
+  "appName": "RURUTEK GPS",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "allowNavigation": [
+      "api.thingspeak.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0d1117"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#0d1117",
+      "androidSpinnerStyle": "large",
+      "spinnerColor": "#58a6ff"
+    }
+  }
+}

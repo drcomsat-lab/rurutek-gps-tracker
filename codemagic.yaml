@@ -1,0 +1,96 @@
+workflows:
+
+  # ── Android APK 빌드 ──────────────────────────────────────────
+  android-debug:
+    name: Android Debug APK
+    max_build_duration: 30
+    environment:
+      java: 21
+      node: 24
+    scripts:
+      - name: npm 의존성 설치
+        script: npm ci
+      - name: Capacitor 동기화
+        script: npx cap sync android
+      - name: APK 빌드
+        script: cd android && ./gradlew assembleDebug
+    artifacts:
+      - android/app/build/outputs/apk/debug/app-debug.apk
+
+  # ── iOS IPA 빌드 ──────────────────────────────────────────────
+  ios-debug:
+    name: iOS Debug IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      node: 24
+      cocoapods: default
+    scripts:
+      - name: npm 의존성 설치
+        script: npm ci
+      - name: iOS 플랫폼 추가 (없을 경우)
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+      - name: Capacitor 동기화
+        script: npx cap sync ios
+      - name: CocoaPods 설치
+        script: cd ios/App && pod install
+      - name: iOS 빌드 (서명 없음 — 시뮬레이터용)
+        script: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+    artifacts:
+      - build/Build/Products/Debug-iphonesimulator/App.app
+
+  # ── iOS 배포용 IPA (Apple Developer 계정 필요) ────────────────
+  ios-release:
+    name: iOS Release IPA (Ad Hoc)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      node: 24
+      cocoapods: default
+      ios_signing:
+        distribution_type: ad_hoc        # app_store 로 변경 시 App Store 배포
+        bundle_identifier: com.rurutek.gpstracker
+    scripts:
+      - name: npm 의존성 설치
+        script: npm ci
+      - name: iOS 플랫폼 추가
+        script: |
+          if [ ! -d "ios" ]; then npx cap add ios; fi
+      - name: Capacitor 동기화
+        script: npx cap sync ios
+      - name: CocoaPods 설치
+        script: cd ios/App && pod install
+      - name: IPA 빌드 및 서명
+        script: |
+          xcode-project use-profiles
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            archive -archivePath build/App.xcarchive
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist /tmp/ExportOptions.plist
+    artifacts:
+      - build/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - swh@rurutek.com
