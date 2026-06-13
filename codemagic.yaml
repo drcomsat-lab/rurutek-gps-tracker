@@ -103,7 +103,8 @@ workflows:
             -workspace "$WORKSPACE" \
             -scheme App \
             -configuration Debug \
-            -sdk iphoneos
+            -sdk iphoneos \
+            -derivedDataPath build
 
           xcodebuild \
             -workspace "$WORKSPACE" \
@@ -114,11 +115,17 @@ workflows:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
             build
       - name: IPA 패키징
         script: |
-          APP_PATH=$(find build/Build/Products/Debug-iphoneos -name "*.app" | head -1)
+          APP_PATH=$(find build/Build/Products/Debug-iphoneos -maxdepth 1 -name "*.app" | head -1)
           echo "앱 경로: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: .app 파일을 찾을 수 없습니다"
+            ls -la build/Build/Products/ || true
+            exit 1
+          fi
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
           zip -r App-unsigned.ipa Payload/
