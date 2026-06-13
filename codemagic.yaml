@@ -29,12 +29,22 @@ workflows:
     scripts:
       - name: npm 의존성 설치
         script: npm ci
-      - name: iOS 플랫폼 추가 및 동기화
+      - name: iOS 플랫폼 추가
         script: |
-          npx cap add ios || true
-          npx cap sync ios
+          npx cap add ios 2>&1 || true
+          if [ ! -f "ios/App/Podfile" ]; then
+            echo "Podfile 없음 - cap add ios 재시도"
+            npx cap add ios
+          fi
+          echo "Podfile 확인:"
+          cat ios/App/Podfile
+      - name: Capacitor 웹 에셋 동기화
+        script: npx cap sync ios
       - name: CocoaPods 설치
-        script: cd ios/App && pod install --repo-update
+        script: |
+          cd ios/App
+          pod repo update
+          pod install
       - name: iOS 빌드 (서명 없음 — 시뮬레이터용)
         script: |
           xcodebuild \
@@ -63,12 +73,19 @@ workflows:
     scripts:
       - name: npm 의존성 설치
         script: npm ci
-      - name: iOS 플랫폼 추가 및 동기화
+      - name: iOS 플랫폼 추가
         script: |
-          npx cap add ios || true
-          npx cap sync ios
+          npx cap add ios 2>&1 || true
+          if [ ! -f "ios/App/Podfile" ]; then
+            npx cap add ios
+          fi
+      - name: Capacitor 웹 에셋 동기화
+        script: npx cap sync ios
       - name: CocoaPods 설치
-        script: cd ios/App && pod install --repo-update
+        script: |
+          cd ios/App
+          pod repo update
+          pod install
       - name: IPA 빌드 및 서명
         script: |
           xcode-project use-profiles
