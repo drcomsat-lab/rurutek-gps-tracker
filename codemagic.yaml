@@ -78,6 +78,54 @@ workflows:
     artifacts:
       - build/Build/Products/Debug-iphonesimulator/**/*.app
 
+  # ── iOS 서명 없는 IPA (AltStore 사이드로딩용) ────────────────
+  ios-unsigned:
+    name: iOS Unsigned IPA (AltStore)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      node: 24
+    scripts:
+      - name: npm 의존성 설치
+        script: npm ci
+      - name: iOS 플랫폼 추가
+        script: npx cap add ios
+      - name: Capacitor 웹 에셋 동기화
+        script: npx cap sync ios
+      - name: iOS 실기기 빌드 (서명 없음)
+        script: |
+          WORKSPACE=$(find ios -name "*.xcworkspace" | head -1)
+          echo "workspace: $WORKSPACE"
+
+          xcodebuild \
+            -resolvePackageDependencies \
+            -workspace "$WORKSPACE" \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphoneos
+
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+      - name: IPA 패키징
+        script: |
+          APP_PATH=$(find build/Build/Products/Debug-iphoneos -name "*.app" | head -1)
+          echo "앱 경로: $APP_PATH"
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r App-unsigned.ipa Payload/
+          echo "IPA 생성 완료: $(du -sh App-unsigned.ipa)"
+    artifacts:
+      - App-unsigned.ipa
+
   # ── iOS 배포용 IPA (Apple Developer 계정 필요) ────────────────
   ios-release:
     name: iOS Release IPA (Ad Hoc)
