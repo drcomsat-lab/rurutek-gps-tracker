@@ -32,24 +32,51 @@ workflows:
         script: npx cap add ios
       - name: Capacitor 웹 에셋 동기화
         script: npx cap sync ios
-      - name: SPM 패키지 해석
+      - name: ios 디렉토리 구조 확인
         script: |
-          xcodebuild \
-            -resolvePackageDependencies \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App
+          echo "=== ios/ 구조 ==="
+          find ios -maxdepth 4 -name "*.xcworkspace" -o -name "*.xcodeproj" -o -name "Package.swift" -o -name "Podfile" 2>/dev/null
+          echo "=== App 디렉토리 ==="
+          ls -la ios/App/ 2>/dev/null || echo "ios/App 없음"
       - name: iOS 빌드 (서명 없음 — 시뮬레이터)
         script: |
-          xcodebuild \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+          WORKSPACE=$(find ios -name "*.xcworkspace" | head -1)
+          PROJECT=$(find ios -name "*.xcodeproj" | head -1)
+
+          if [ -n "$WORKSPACE" ]; then
+            echo "xcworkspace 사용: $WORKSPACE"
+            xcodebuild \
+              -workspace "$WORKSPACE" \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO \
+              -resolvePackageDependencies
+            xcodebuild \
+              -workspace "$WORKSPACE" \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          elif [ -n "$PROJECT" ]; then
+            echo "xcodeproj 사용: $PROJECT"
+            xcodebuild \
+              -project "$PROJECT" \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          else
+            echo "Xcode 프로젝트 파일을 찾을 수 없습니다"
+            exit 1
+          fi
     artifacts:
-      - build/Build/Products/Debug-iphonesimulator/App.app
+      - build/Build/Products/Debug-iphonesimulator/**/*.app
 
   # ── iOS 배포용 IPA (Apple Developer 계정 필요) ────────────────
   ios-release:
@@ -69,17 +96,12 @@ workflows:
         script: npx cap add ios
       - name: Capacitor 웹 에셋 동기화
         script: npx cap sync ios
-      - name: SPM 패키지 해석
-        script: |
-          xcodebuild \
-            -resolvePackageDependencies \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App
       - name: IPA 빌드 및 서명
         script: |
+          WORKSPACE=$(find ios -name "*.xcworkspace" | head -1)
           xcode-project use-profiles
           xcodebuild \
-            -workspace ios/App/App.xcworkspace \
+            -workspace "$WORKSPACE" \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
