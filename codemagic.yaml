@@ -17,35 +17,28 @@ workflows:
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
 
-  # ── iOS IPA 빌드 ──────────────────────────────────────────────
+  # ── iOS 빌드 (Capacitor 8 + Swift Package Manager) ───────────
   ios-debug:
-    name: iOS Debug IPA
+    name: iOS Debug (Simulator)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
       xcode: latest
       node: 24
-      cocoapods: default
     scripts:
       - name: npm 의존성 설치
         script: npm ci
       - name: iOS 플랫폼 추가
-        script: |
-          npx cap add ios 2>&1 || true
-          if [ ! -f "ios/App/Podfile" ]; then
-            echo "Podfile 없음 - cap add ios 재시도"
-            npx cap add ios
-          fi
-          echo "Podfile 확인:"
-          cat ios/App/Podfile
+        script: npx cap add ios
       - name: Capacitor 웹 에셋 동기화
         script: npx cap sync ios
-      - name: CocoaPods 설치
+      - name: SPM 패키지 해석
         script: |
-          cd ios/App
-          pod repo update
-          pod install
-      - name: iOS 빌드 (서명 없음 — 시뮬레이터용)
+          xcodebuild \
+            -resolvePackageDependencies \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App
+      - name: iOS 빌드 (서명 없음 — 시뮬레이터)
         script: |
           xcodebuild \
             -workspace ios/App/App.xcworkspace \
@@ -66,7 +59,6 @@ workflows:
     environment:
       xcode: latest
       node: 24
-      cocoapods: default
       ios_signing:
         distribution_type: ad_hoc
         bundle_identifier: com.rurutek.gpstracker
@@ -74,18 +66,15 @@ workflows:
       - name: npm 의존성 설치
         script: npm ci
       - name: iOS 플랫폼 추가
-        script: |
-          npx cap add ios 2>&1 || true
-          if [ ! -f "ios/App/Podfile" ]; then
-            npx cap add ios
-          fi
+        script: npx cap add ios
       - name: Capacitor 웹 에셋 동기화
         script: npx cap sync ios
-      - name: CocoaPods 설치
+      - name: SPM 패키지 해석
         script: |
-          cd ios/App
-          pod repo update
-          pod install
+          xcodebuild \
+            -resolvePackageDependencies \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App
       - name: IPA 빌드 및 서명
         script: |
           xcode-project use-profiles
